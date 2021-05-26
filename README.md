@@ -20,7 +20,8 @@ GUI do laravel para Linux.
 ## Instalação
 *   git clone https://github.com/MarusDod/Laragolas
 *   cd Laragolas
-*   make
+*   make release
+*   make install
 
 ## Correr
-*   ./laragolas.out
+*   laragolas.out
