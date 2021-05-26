@@ -1,7 +1,9 @@
-all:gui.out
+prog=laragolas.out
 
-gui.out: main.c gui.glade
+all:$(prog)
+
+$(prog): main.c gui.glade
 	gcc -g -O0 -o $@  main.c -Wall `pkg-config --cflags  --libs gtk+-3.0` -export-dynamic
 
 clean:
-	rm gui.out
+	rm $(prog)

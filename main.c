@@ -46,6 +46,11 @@ GtkEntry* dbPort = NULL;
 GtkEntry* serverPort = NULL;
 GtkWidget* itemRoot = NULL;
 
+GtkDialog* dialog = NULL;
+GtkEntry* projectEntry = NULL;
+GtkButton* cancelButton = NULL;
+GtkButton* okButton = NULL;
+
 FILE* config_file = NULL;
 
 typedef struct {
@@ -233,6 +238,41 @@ int show_popup(GtkWidget *widget, GdkEvent *event) {
   return FALSE;
 }
 
+int new_laravel_callback(GtkMenuItem* item,gpointer data){
+    int response = gtk_dialog_run(dialog);
+
+    switch(response){
+        case GTK_RESPONSE_CANCEL:
+            break;
+        case GTK_RESPONSE_OK:
+        {
+            char n[300];
+            sprintf(n,"composer create-project --prefer-dist laravel/laravel %s/%s",settings.root_path,gtk_entry_get_text(projectEntry));
+            spawn_new_process(n);
+
+        }
+            break;
+    }
+
+    gtk_widget_destroy(GTK_WIDGET(dialog));
+    gtk_entry_set_text(projectEntry,"");
+
+    return true;
+}
+
+
+int okButton_callback(GtkButton* button,gpointer data){
+    gtk_dialog_response(dialog,GTK_RESPONSE_OK);
+
+    return true;
+}
+
+int cancelButton_callback(GtkButton* button,gpointer data){
+    gtk_dialog_response(dialog,GTK_RESPONSE_CANCEL);
+
+    return true;
+}
+
 int parse_config(char* filename){
     config_file = fopen(filename,"rw");
 
@@ -293,11 +333,13 @@ int main(int argc,char* argv[]){
 
     window = GTK_WIDGET(gtk_builder_get_object(builder,"mainWindow"));
     settingsWindow = GTK_WIDGET(gtk_builder_get_object(builder,"settingsWindow"));
+    dialog = GTK_DIALOG(gtk_builder_get_object(builder,"laravelDialog"));
 
     menu = GTK_MENU(gtk_menu_new());
 
 
     GtkWidget* item1 = gtk_menu_item_new_with_label("new laravel project");
+    g_signal_connect(G_OBJECT(item1), "activate", G_CALLBACK (new_laravel_callback), NULL);
 
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), item1);
     gtk_widget_show(item1);
@@ -310,6 +352,7 @@ int main(int argc,char* argv[]){
     g_signal_connect_swapped(G_OBJECT(window), "button-press-event",G_CALLBACK(show_popup), menu);
     g_signal_connect(G_OBJECT(window),"destroy", gtk_main_quit, NULL);
     g_signal_connect (settingsWindow, "delete_event", G_CALLBACK (gtk_widget_hide_on_delete), NULL);
+    g_signal_connect (G_OBJECT(dialog), "close", G_CALLBACK (gtk_widget_hide_on_delete), NULL);
 
     startButton = GTK_BUTTON(gtk_builder_get_object(builder, "startButton"));
     webButton = GTK_BUTTON(gtk_builder_get_object(builder, "webButton"));
@@ -317,6 +360,9 @@ int main(int argc,char* argv[]){
     terminalButton = GTK_BUTTON(gtk_builder_get_object(builder, "terminalButton"));
     rootButton = GTK_BUTTON(gtk_builder_get_object(builder, "rootButton"));
     reloadButton = GTK_BUTTON(gtk_builder_get_object(builder, "reloadButton"));
+    okButton = GTK_BUTTON(gtk_builder_get_object(builder, "okButton"));
+    cancelButton = GTK_BUTTON(gtk_builder_get_object(builder, "cancelButton"));
+    projectEntry = GTK_ENTRY(gtk_builder_get_object(builder, "projectEntry"));
 
     settingsButton = GTK_BUTTON(gtk_builder_get_object(builder, "settingsButton"));
 
@@ -346,9 +392,10 @@ int main(int argc,char* argv[]){
     g_signal_connect(GTK_WIDGET (terminalButton), "clicked",G_CALLBACK(terminal_button_callback),NULL);
     g_signal_connect(GTK_WIDGET (rootButton), "clicked",G_CALLBACK(root_button_callback),NULL);
     g_signal_connect(GTK_WIDGET (reloadButton), "clicked",G_CALLBACK(reload_button_callback),NULL);
-
     g_signal_connect(GTK_WIDGET (settingsButton), "clicked",G_CALLBACK(settings_button_callback),NULL);
 
+    g_signal_connect(GTK_WIDGET (okButton), "clicked",G_CALLBACK(okButton_callback),NULL);
+    g_signal_connect(GTK_WIDGET (cancelButton), "clicked",G_CALLBACK(cancelButton_callback),NULL);
 
     g_signal_connect(GTK_WIDGET (documentRoot), "activate",G_CALLBACK(documentRoot_changed_callback),NULL);
     g_signal_connect(GTK_WIDGET (dataDir), "activate",G_CALLBACK(dataDir_changed_callback),NULL);
