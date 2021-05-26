@@ -15,6 +15,16 @@
 #define SERVER_PORT 8000
 #define HOST_NAME "localhost"
 
+#ifndef HOME_PATH
+    #define HOME_PATH
+#endif
+
+#ifdef RELEASE
+    #define CONFIG_PATH HOME_PATH "/.config/laragolas/"
+#else 
+    #define CONFIG_PATH
+#endif
+
 #define waitProcess(pid,str)\
     do{\
         int wstatus;\
@@ -324,12 +334,12 @@ void update_config_file(){
 
 
 int main(int argc,char* argv[]){
-    parse_config("/home/marcos/Desktop/laragolas/config.txt");
+    parse_config(CONFIG_PATH"config.txt");
 
     gtk_init(&argc,&argv);
 
     builder = gtk_builder_new();
-    gtk_builder_add_from_file(builder,"gui.glade",NULL);
+    gtk_builder_add_from_file(builder,CONFIG_PATH"gui.glade",NULL);
 
     window = GTK_WIDGET(gtk_builder_get_object(builder,"mainWindow"));
     settingsWindow = GTK_WIDGET(gtk_builder_get_object(builder,"settingsWindow"));
