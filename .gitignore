@@ -1,0 +1,5 @@
+gui.glade~
+logo.jpeg~
+*.swp
+/.vscode
+*.out

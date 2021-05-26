@@ -1,0 +1,5 @@
+host: localhost
+mysql-path: /var/lib/mysql
+mysql-port: 3306
+root-path: /home/marcos
+port: 8000
