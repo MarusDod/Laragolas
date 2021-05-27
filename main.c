@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdbool.h>
 #include <sys/wait.h>
 #include <sys/types.h>
@@ -5,6 +6,7 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include <gtk-3.0/gtk/gtk.h>
 
@@ -97,18 +99,40 @@ int spawn_new_process(const char* str){
     return pid;
 }
 
+
+gboolean check_mysql_service(){
+    return system("systemctl is-active --quiet mysql.service") == 0;
+}
+
 void set_documentRoot_popup();
 void update_config_file();
 
 void start_button_callback(GtkButton* button,gpointer data){
+    int ret,pid;
+
     if(!settings.isrunning){
-        spawn_new_process("systemctl start mysql.service");
+        g_print("aaaa\n");
+        pid = spawn_new_process("systemctl start mysql.service");
+        waitProcess(pid,"");
+        ret = check_mysql_service();
+
+        if(!ret) 
+            return;
+
         gtk_button_set_label(button,"stop");
+        gtk_widget_set_visible(GTK_WIDGET(reloadButton),true);
         settings.isrunning = true;
     }
     else{
-        spawn_new_process("systemctl stop mysql.service");
+        pid = spawn_new_process("systemctl stop mysql.service");
+        waitProcess(pid,"");
+        ret = check_mysql_service();
+
+        if(ret) 
+            return;
+
         gtk_button_set_label(button,"start");
+        gtk_widget_set_visible(GTK_WIDGET(reloadButton),false);
         settings.isrunning = false;
     }
 }
@@ -305,14 +329,14 @@ int parse_config(char* filename){
     fscanf(config_file," port:");
     fscanf(config_file,"%hd",&settings.port);
 
-    //fprintf(stderr,"%s\n",settings.mysql_path);
-    //fprintf(stderr,"%d\n",settings.mysql_port);
-    //fprintf(stderr,"%s\n",settings.root_path);
-    //fprintf(stderr,"%d\n",settings.port);
-    //assert(!strcmp(settings.mysql_path,"/var/lib/mysql"));
-    //assert(settings.mysql_port == 3306);
-    //assert(!strcmp(settings.root_path,"/var/www"));
-    //assert(settings.port == 8000);
+    switch(check_mysql_service()){
+        case true:
+            settings.isrunning = true;
+            break;
+        case 0:
+            settings.isrunning = false;
+            break;
+    }
 
     return true;
 }
@@ -376,6 +400,14 @@ int main(int argc,char* argv[]){
 
     settingsButton = GTK_BUTTON(gtk_builder_get_object(builder, "settingsButton"));
 
+    if(settings.isrunning){
+        gtk_button_set_label(startButton,"stop");
+        gtk_widget_set_visible(GTK_WIDGET(reloadButton),true);
+    }
+    else{
+        gtk_button_set_label(startButton,"start");
+        gtk_widget_set_visible(GTK_WIDGET(reloadButton),false);
+    }
 
     documentRoot = GTK_ENTRY(gtk_builder_get_object(builder, "documentRootEntry"));
     gtk_entry_set_text(documentRoot,settings.root_path);

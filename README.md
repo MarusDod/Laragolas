@@ -2,6 +2,8 @@
 
 GUI do laravel para Linux.
 
+![Alt text](https://raw.githubusercontent.com/MarusDod/Laragolas/master/laragolas.png "laragolas")
+
 ## Requisitos
 *   Ter uma Debian based distro
 *   Systemd
@@ -18,10 +20,15 @@ GUI do laravel para Linux.
 *   laravel
 
 ## Instalação
-*   git clone https://github.com/MarusDod/Laragolas
-*   cd Laragolas
-*   make release
-*   make install
+
+```bash
+   git clone https://github.com/MarusDod/Laragolas
+   cd Laragolas
+   make release
+   make install
+```
 
 ## Correr
-*   laragolas.out
+```
+   laragolas.out
+```

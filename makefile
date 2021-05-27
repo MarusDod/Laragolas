@@ -24,7 +24,7 @@ install:
 	cp ./laragolas.png $(install_path)/share/icons/laragolas.png
 	mkdir -p ~/.config/laragolas
 	cp gui.glade icon.jpeg config.txt logo.jpeg ~/.config/laragolas/
-	ln laragolas.desktop ~/Desktop/laragolas.desktop
+	ln -f laragolas.desktop ~/Desktop/laragolas.desktop
 	chmod +x ~/Desktop/laragolas.desktop
 
 uninstall:
