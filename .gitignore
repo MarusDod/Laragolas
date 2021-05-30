@@ -4,3 +4,4 @@ laragolas.desktop
 *.swp
 /.vscode
 *.out
+test.c

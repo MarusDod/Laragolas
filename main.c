@@ -1,14 +1,18 @@
 #include <stdio.h>
 #include <stdbool.h>
 #include <sys/wait.h>
+#include <errno.h>
 #include <sys/types.h>
-#include <dirent.h>
 #include <sys/stat.h>
+#include <signal.h>
+#include <dirent.h>
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
 
 #include <gtk-3.0/gtk/gtk.h>
+
+#include "vector.h"
 
 
 #define ROOT_PATH "/var/www"
@@ -65,6 +69,11 @@ GtkButton* okButton = NULL;
 
 FILE* config_file = NULL;
 
+typedef vector(struct unnamed_{
+    int pid;
+    int port;
+}) VectorPID;
+
 typedef struct {
     bool isrunning;
     char* root_path;
@@ -73,6 +82,8 @@ typedef struct {
     char* host;
     uint16_t port;
 }Settings;
+
+VectorPID server_processes;
 
 Settings settings = (Settings){
     .isrunning = false,
@@ -83,11 +94,14 @@ Settings settings = (Settings){
     .port = SERVER_PORT
 };
 
+void exit_handler(void);
+
 int spawn_new_process(const char* str){
     pid_t pid = -1;
 
     switch(pid = fork()){
         case 0:
+            printf("%d\n",getpid());
             system(str);
             exit(0);
         case -1:
@@ -121,6 +135,7 @@ void start_button_callback(GtkButton* button,gpointer data){
 
         gtk_button_set_label(button,"stop");
         gtk_widget_set_visible(GTK_WIDGET(reloadButton),true);
+        gtk_widget_set_visible(GTK_WIDGET(itemRoot),true);
         settings.isrunning = true;
     }
     else{
@@ -133,7 +148,10 @@ void start_button_callback(GtkButton* button,gpointer data){
 
         gtk_button_set_label(button,"start");
         gtk_widget_set_visible(GTK_WIDGET(reloadButton),false);
+        gtk_widget_set_visible(GTK_WIDGET(itemRoot),false);
         settings.isrunning = false;
+
+        exit_handler();
     }
 }
 
@@ -170,17 +188,31 @@ void php_serve_button_callback(GtkMenuItem* item,gpointer data){
     char str2[1000];
     //char* filename = (char*)gtk_menu_item_get_label(item);
 
-    sprintf(str,"php %s/artisan serve --host=%s --port=%d\n",(char*)data,settings.host,settings.port);
+    int port = settings.port;
+
+    vector_foreach(&server_processes,i){
+        if(port == vector_get(&server_processes,i).port){
+            ++port;
+            i = 0;
+        }
+    }
+
+    sprintf(str,"php %s/artisan serve --host=%s --port=%d\n",(char*)data,settings.host,port);
     g_print("%s",str);
-    sprintf(str2,"xdg-open http:/%s:%d\n",settings.host,settings.port);
+    sprintf(str2,"xdg-open http:/%s:%d\n",settings.host,port);
     g_print("%s",str2);
 
-    spawn_new_process(str);
+    int pid = spawn_new_process(str);
 
-    sleep(2);
+    sleep(1);
     spawn_new_process(str2);
 
-    free(data);
+    struct unnamed_ a = (struct unnamed_){
+        .pid = pid,
+        .port = port,
+    };
+    vector_pushback(&server_processes,a);
+
 }
 
 void settings_button_callback(GtkButton* button,gpointer data){
@@ -220,6 +252,7 @@ void serverPort_changed_callback(GtkEntry* entry,gpointer data){
     const char* txt = (char*) gtk_entry_get_text(entry);
 
     settings.port = atoi(txt);
+
     update_config_file();
 }
 
@@ -257,6 +290,7 @@ void set_documentRoot_popup(){
     }
 
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(itemRoot),GTK_WIDGET(documentRootMenu));
+    gtk_widget_set_visible(GTK_WIDGET(itemRoot),settings.isrunning);
 }
 
 int show_popup(GtkWidget *widget, GdkEvent *event) {
@@ -359,8 +393,10 @@ void update_config_file(){
 
 int main(int argc,char* argv[]){
     parse_config(CONFIG_PATH"config.txt");
-
+    vector_init(&server_processes);
     gtk_init(&argc,&argv);
+
+    atexit(exit_handler);
 
     builder = gtk_builder_new();
     gtk_builder_add_from_file(builder,CONFIG_PATH"gui.glade",NULL);
@@ -452,4 +488,28 @@ int main(int argc,char* argv[]){
     fclose(config_file);
 
     return 0;
+}
+
+void exit_handler(void){
+    struct stat st;
+    char str[20];
+
+    vector_foreach(&server_processes,i){
+        struct unnamed_ a = vector_get(&server_processes,i);
+
+        //force close port
+        snprintf(str,20,"fuser -k %d/tcp",a.port);
+        system(str);
+
+        //kill child process if exists
+        snprintf(str,20,"/proc/%d",a.pid);
+        printf("killing %d...\n",a.pid);
+
+        if (stat(str, &st) == -1 && errno == ENOENT) {
+            continue;
+        }
+
+        kill(a.pid,SIGKILL);
+    }
+
 }

@@ -2,6 +2,12 @@ prog=laragolas.out
 install_path=~/.local
 U=$(shell whoami)
 
+CONFIG="host: localhost\n"
+CONFIG+="mysql-path: $(shell mysqld --verbose --help | grep ^datadir | awk '{print $$2}')\n"
+CONFIG+="mysql-port: $(shell mysqld --verbose --help | grep ^port | awk 'NR==1 {print $$2}')\n"
+CONFIG+="root-path:${HOME}/\n"
+CONFIG+="port: 8000"
+
 all:$(prog)
 
 $(prog): main.c gui.glade
@@ -17,13 +23,19 @@ release: main.c gui.glade
 clean:
 	rm $(prog)
 
+echo:
+	echo "\n\n\n\n"
+	echo $(CONFIG)
+
+
 install:
 	sed "s/user/$U/g" laragolas.desktop.in > laragolas.desktop
 	cp ./laragolas.out $(install_path)/bin/laragolas.out
 	cp ./laragolas.desktop $(install_path)/share/applications/laragolas.desktop
 	cp ./laragolas.png $(install_path)/share/icons/laragolas.png
 	mkdir -p ~/.config/laragolas
-	cp gui.glade icon.jpeg config.txt logo.jpeg ~/.config/laragolas/
+	echo $(CONFIG) > ~/.config/laragolas/config.txt
+	cp gui.glade icon.jpeg logo.jpeg ~/.config/laragolas/
 	ln -f laragolas.desktop ~/Desktop/laragolas.desktop
 	chmod +x ~/Desktop/laragolas.desktop
 
