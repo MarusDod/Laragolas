@@ -21,7 +21,9 @@ release: main.c gui.glade
 .phony: clean install uninstall release
 
 clean:
-	rm $(prog)
+	rm -f *.out
+	rm -f *~
+	rm -f laragolas.desktop
 
 echo:
 	echo "\n\n\n\n"
