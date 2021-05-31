@@ -17,13 +17,14 @@ GUI do laravel para Linux.
 *   gcc
 *   composer
 *   php
-*   laravel
 
 ## Instalação
 
 ```bash
    git clone https://github.com/MarusDod/Laragolas
    cd Laragolas
+   chmod +x configure.sh
+   ./configure.sh
    make release
    make install
 ```
