@@ -285,7 +285,8 @@ void set_documentRoot_popup(){
     struct dirent *dp;
     DIR *dfd;
     char *dir = (char*) gtk_menu_item_get_label(GTK_MENU_ITEM(itemRoot));
-    char filename_qfd[1000] ;
+    char filename_qfd[300] ;
+    char str4[400];
 
     if ((dfd = opendir(dir)) == NULL){
         return;
@@ -302,17 +303,22 @@ void set_documentRoot_popup(){
         if(!strcmp(".",dp->d_name) || !strcmp("..",dp->d_name)) continue;
 
         sprintf( filename_qfd , "%s/%s",dir,dp->d_name) ;
-        stat(filename_qfd,&stbuf);
+        sprintf(str4,"%s/public",filename_qfd);
 
-        if((stbuf.st_mode & S_IFMT ) == S_IFDIR ){
-            GtkWidget* item = gtk_menu_item_new_with_label(dp->d_name);
 
-            gtk_menu_shell_append(GTK_MENU_SHELL(documentRootMenu), item);
-            gtk_widget_show(item);
-            g_signal_connect(item, "activate",G_CALLBACK(open_in_browser_button_callback),strdup(filename_qfd));
+        if(stat(str4,&stbuf) == -1 || (stbuf.st_mode & S_IFMT) != S_IFDIR)
+            continue;
 
-        }
+        fprintf(stderr,"%s\n",str4);
+
+        GtkWidget* item = gtk_menu_item_new_with_label(dp->d_name);
+
+        gtk_menu_shell_append(GTK_MENU_SHELL(documentRootMenu), item);
+        gtk_widget_show(item);
+        g_signal_connect(item, "activate",G_CALLBACK(open_in_browser_button_callback),strdup(filename_qfd));
     }
+
+    closedir(dfd);
 
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(itemRoot),GTK_WIDGET(documentRootMenu));
     gtk_widget_set_visible(GTK_WIDGET(itemRoot),settings.isrunning);
@@ -458,7 +464,6 @@ void write_virtual_hosts(){
         sprintf(str,"%sauto.%s.conf",APACHE_ETC, vHost);
         sprintf(str2,"%s%s",settings.root_path, vHost);
         sprintf(str3,"%s.test",vHost);
-
 
         FILE* fptr = fopen(str,"w");
 
