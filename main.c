@@ -1,4 +1,7 @@
+#define _GNU_SOURCE
+
 #include <stdio.h>
+#include <stdlib.h>
 #include <stdbool.h>
 #include <sys/wait.h>
 #include <errno.h>
@@ -12,24 +15,33 @@
 
 #include <gtk-3.0/gtk/gtk.h>
 
-#include "vector.h"
-
 
 #define ROOT_PATH "/var/www"
 #define MYSQL_PATH "/var/lib/mysql"
 #define MYSQL_PORT 3306
 #define SERVER_PORT 8000
 #define HOST_NAME "localhost"
-
-#ifndef HOME_PATH
-    #define HOME_PATH
-#endif
+#define APACHE_ETC "/etc/apache2/sites-enabled/"
+#define HOST_ETC "/etc/hosts"
 
 #ifdef RELEASE
-    #define CONFIG_PATH HOME_PATH "/.config/laragolas/"
+    #define CONFIG_PATH "/etc/laragolas/"
 #else 
-    #define CONFIG_PATH
+    #define CONFIG_PATH "./"
 #endif
+
+static const char* virtual_host_template = 
+    "Listen %d\n"
+    "<VirtualHost *:%1$d>\n"
+    "   DocumentRoot \"%2$s/public/\"\n"
+    "   ServerName %3$s.test\n"
+    "   ServerAlias *.%3$s.test\n"
+    "   <Directory \"%2$s/public/\">\n"
+    "       AllowOverride All\n"
+    "       Require all granted\n"
+    "   </Directory>\n"
+    "</VirtualHost>\n";
+    
 
 #define waitProcess(pid,str)\
     do{\
@@ -73,11 +85,6 @@ GtkButton* okButton1 = NULL;
 
 FILE* config_file = NULL;
 
-typedef vector(struct unnamed_{
-    int pid;
-    int port;
-}) VectorPID;
-
 typedef struct {
     bool isrunning;
     char* root_path;
@@ -86,8 +93,6 @@ typedef struct {
     char* host;
     uint16_t port;
 }Settings;
-
-VectorPID server_processes;
 
 Settings settings = (Settings){
     .isrunning = false,
@@ -99,14 +104,25 @@ Settings settings = (Settings){
 };
 
 void exit_handler(void);
+void write_virtual_hosts();
+void change_hosts_entry(const char* string,bool insert);
+void cleanup_hosts_entries();
 
-int spawn_new_process(const char* str){
+
+int spawn_new_process(const char* str,bool asroot){
     pid_t pid = -1;
 
     switch(pid = fork()){
         case 0:
-            printf("%d\n",getpid());
-            system(str);
+            if(!asroot){
+                char str2[500];
+                snprintf(str2,500,"bash -c \"su $SUDO_USER -c \\\"%s\\\"\"",str);
+                system(str2);
+            }
+            else{
+                system(str);
+            }
+
             exit(0);
         case -1:
             exit(1);
@@ -117,9 +133,18 @@ int spawn_new_process(const char* str){
     return pid;
 }
 
+void message_box(const char* string) {
+    GtkWidget* widget = gtk_message_dialog_new(GTK_WINDOW(window),GTK_DIALOG_DESTROY_WITH_PARENT,GTK_MESSAGE_INFO,GTK_BUTTONS_OK,"%s\n",string);
+    gtk_dialog_run(GTK_DIALOG(widget));
+}
 
+//todo adicionar apache
 gboolean check_mysql_service(){
     return system("systemctl is-active --quiet mysql.service") == 0;
+}
+
+gboolean check_apache_service(){
+    return system("systemctl is-active --quiet apache2.service") == 0;
 }
 
 void set_documentRoot_popup();
@@ -129,10 +154,19 @@ void start_button_callback(GtkButton* button,gpointer data){
     int ret,pid;
 
     if(!settings.isrunning){
-        g_print("aaaa\n");
-        pid = spawn_new_process("systemctl start mysql.service");
+        pid = spawn_new_process("systemctl start mysql.service",true);
+
         waitProcess(pid,"");
         ret = check_mysql_service();
+
+        if(!ret) 
+            return;
+
+        set_documentRoot_popup();
+        pid = spawn_new_process("systemctl start apache2.service",true);
+
+        waitProcess(pid,"");
+        ret = check_apache_service();
 
         if(!ret) 
             return;
@@ -141,11 +175,19 @@ void start_button_callback(GtkButton* button,gpointer data){
         gtk_widget_set_visible(GTK_WIDGET(reloadButton),true);
         gtk_widget_set_visible(GTK_WIDGET(itemRoot),true);
         settings.isrunning = true;
+
     }
     else{
-        pid = spawn_new_process("systemctl stop mysql.service");
+        pid = spawn_new_process("systemctl stop mysql.service",true);
         waitProcess(pid,"");
         ret = check_mysql_service();
+
+        if(ret) 
+            return;
+
+        pid = spawn_new_process("systemctl stop apache2.service",true);
+        waitProcess(pid,"");
+        ret = check_apache_service();
 
         if(ret) 
             return;
@@ -154,8 +196,6 @@ void start_button_callback(GtkButton* button,gpointer data){
         gtk_widget_set_visible(GTK_WIDGET(reloadButton),false);
         gtk_widget_set_visible(GTK_WIDGET(itemRoot),false);
         settings.isrunning = false;
-
-        exit_handler();
     }
 }
 
@@ -163,60 +203,40 @@ void web_button_callback(GtkButton* button,gpointer data){
     char str[300];
 
     sprintf(str,"firefox %s",settings.root_path);
-    system(str);
+    spawn_new_process(str,false);
 }
 
 void reload_button_callback(GtkButton* button,gpointer data){
-    spawn_new_process("systemctl restart mysql.service");
+    spawn_new_process("systemctl restart mysql.service",true);
+    spawn_new_process("systemctl restart apache2.service",true);
 }
 
 void terminal_button_callback(GtkButton* button,gpointer data){
     char str [1000];
     sprintf(str,"cd %s && x-terminal-emulator",settings.root_path);
-    spawn_new_process(str);
-    g_print("eeee\n");
+    spawn_new_process(str,false);
 }
 
 void db_button_callback(GtkButton* button,gpointer data){
-    spawn_new_process("mysql-workbench");
+    spawn_new_process("mysql-workbench",false);
 }
 
 void root_button_callback(GtkButton* button,gpointer data){
     char str[1000];
     sprintf(str,"xdg-open %s",settings.root_path);
-    spawn_new_process(str);
+    spawn_new_process(str,false);
 
 }
 
-void php_serve_button_callback(GtkMenuItem* item,gpointer data){
+void open_in_browser_button_callback(GtkMenuItem* item,gpointer data){
     char str[1000];
-    char str2[1000];
-    //char* filename = (char*)gtk_menu_item_get_label(item);
+    const char* folder = gtk_menu_item_get_label(item);
 
     int port = settings.port;
 
-    vector_foreach(&server_processes,i){
-        if(port == vector_get(&server_processes,i).port){
-            ++port;
-            i = 0;
-        }
-    }
+    sprintf(str,"xdg-open http://%s.test:%d\n",folder,port);
 
-    sprintf(str,"php %s/artisan serve --host=%s --port=%d\n",(char*)data,settings.host,port);
-    g_print("%s",str);
-    sprintf(str2,"xdg-open http:/%s:%d\n",settings.host,port);
-    g_print("%s",str2);
-
-    int pid = spawn_new_process(str);
-
-    sleep(1);
-    spawn_new_process(str2);
-
-    struct unnamed_ a = (struct unnamed_){
-        .pid = pid,
-        .port = port,
-    };
-    vector_pushback(&server_processes,a);
+    spawn_new_process(str,false);
 
 }
 
@@ -289,13 +309,16 @@ void set_documentRoot_popup(){
 
             gtk_menu_shell_append(GTK_MENU_SHELL(documentRootMenu), item);
             gtk_widget_show(item);
-            g_signal_connect(item, "activate",G_CALLBACK(php_serve_button_callback),strdup(filename_qfd));
+            g_signal_connect(item, "activate",G_CALLBACK(open_in_browser_button_callback),strdup(filename_qfd));
 
         }
     }
 
     gtk_menu_item_set_submenu(GTK_MENU_ITEM(itemRoot),GTK_WIDGET(documentRootMenu));
     gtk_widget_set_visible(GTK_WIDGET(itemRoot),settings.isrunning);
+
+    cleanup_hosts_entries();
+    write_virtual_hosts();
 }
 
 int show_popup(GtkWidget *widget, GdkEvent *event) {
@@ -321,7 +344,7 @@ int new_laravel_callback(GtkMenuItem* item,gpointer data){
         {
             char n[300];
             sprintf(n,"composer create-project --prefer-dist laravel/laravel %s/%s",settings.root_path,gtk_entry_get_text(projectEntry));
-            spawn_new_process(n);
+            spawn_new_process(n,false);
 
         }
             break;
@@ -344,7 +367,7 @@ int new_db_callback(GtkMenuItem* item,gpointer data){
             char n[300];
 
             sprintf(n,"mysql -u root -e \"create database %s\"",gtk_entry_get_text(dbEntry));
-            spawn_new_process(n);
+            spawn_new_process(n,true);
 
         }
             break;
@@ -402,7 +425,7 @@ int parse_config(char* filename){
     fscanf(config_file," port:");
     fscanf(config_file,"%hd",&settings.port);
 
-    switch(check_mysql_service()){
+    switch(check_mysql_service() && check_apache_service()){
         case true:
             settings.isrunning = true;
             break;
@@ -412,6 +435,56 @@ int parse_config(char* filename){
     }
 
     return true;
+}
+
+void write_virtual_hosts(){
+    char str[300];
+    char str2[300];
+    char str3[100];
+    GList* children = gtk_container_get_children(GTK_CONTAINER(documentRootMenu));
+
+    struct stat st;
+    if ((stat (APACHE_ETC, &st)) == -1)
+    {
+        message_box ("no " APACHE_ETC " :(");
+        exit(1);
+    }
+
+    for(;children;children = children->next){
+        GtkMenuItem* item = children->data;
+
+        const char* vHost = gtk_menu_item_get_label(item);
+
+        sprintf(str,"%sauto.%s.conf",APACHE_ETC, vHost);
+        sprintf(str2,"%s%s",settings.root_path, vHost);
+        sprintf(str3,"%s.test",vHost);
+
+
+        FILE* fptr = fopen(str,"w");
+
+        if(!fptr){
+            fprintf(stderr,"could not write to file %s,%s",str,strerror(errno));
+            exit(1);
+        }
+
+        fprintf(fptr,virtual_host_template,settings.port,str2,vHost);
+        change_hosts_entry(str3,true);
+        fclose(fptr);
+    }
+
+}
+
+void change_hosts_entry(const char* string,bool insert){
+    static const char* ip = "127.0.0.1";
+
+    char str[300];
+    snprintf(str,200,"bash " CONFIG_PATH"add_entry.sh %s %s %s %s",ip,string,HOST_ETC,insert ? "add" : "delete");
+    system(str);
+}
+
+void cleanup_hosts_entries(){
+    system("sudo sed -i \"/\\#laragolas\\!\\#/d\" " HOST_ETC);
+    system("sudo rm -rf " APACHE_ETC "*");
 }
 
 void update_config_file(){
@@ -432,10 +505,8 @@ void update_config_file(){
 
 int main(int argc,char* argv[]){
     parse_config(CONFIG_PATH"config.txt");
-    vector_init(&server_processes);
-    gtk_init(&argc,&argv);
 
-    atexit(exit_handler);
+    gtk_init(&argc,&argv);
 
     builder = gtk_builder_new();
     gtk_builder_add_from_file(builder,CONFIG_PATH"gui.glade",NULL);
@@ -466,7 +537,6 @@ int main(int argc,char* argv[]){
     itemRoot = gtk_menu_item_new_with_label(settings.root_path);
     gtk_menu_shell_append(GTK_MENU_SHELL(menu), itemRoot);
     gtk_widget_show(itemRoot);
-    set_documentRoot_popup();
 
     g_signal_connect_swapped(G_OBJECT(window), "button-press-event",G_CALLBACK(show_popup), menu);
     g_signal_connect(G_OBJECT(window),"destroy", gtk_main_quit, NULL);
@@ -489,15 +559,6 @@ int main(int argc,char* argv[]){
     cancelButton1 = GTK_BUTTON(gtk_builder_get_object(builder, "cancelButton1"));
 
     settingsButton = GTK_BUTTON(gtk_builder_get_object(builder, "settingsButton"));
-
-    if(settings.isrunning){
-        gtk_button_set_label(startButton,"stop");
-        gtk_widget_set_visible(GTK_WIDGET(reloadButton),true);
-    }
-    else{
-        gtk_button_set_label(startButton,"start");
-        gtk_widget_set_visible(GTK_WIDGET(reloadButton),false);
-    }
 
     documentRoot = GTK_ENTRY(gtk_builder_get_object(builder, "documentRootEntry"));
     gtk_entry_set_text(documentRoot,settings.root_path);
@@ -538,6 +599,7 @@ int main(int argc,char* argv[]){
     g_signal_connect(GTK_WIDGET (dbPort), "activate",G_CALLBACK(dbPort_changed_callback),NULL);
     g_signal_connect(GTK_WIDGET (serverPort), "activate",G_CALLBACK(serverPort_changed_callback),NULL);
 
+    start_button_callback(startButton,NULL);
 
     gtk_widget_show(window);
     gtk_main();
@@ -545,28 +607,4 @@ int main(int argc,char* argv[]){
     fclose(config_file);
 
     return 0;
-}
-
-void exit_handler(void){
-    struct stat st;
-    char str[20];
-
-    vector_foreach(&server_processes,i){
-        struct unnamed_ a = vector_get(&server_processes,i);
-
-        //force close port
-        snprintf(str,20,"fuser -k %d/tcp",a.port);
-        system(str);
-
-        //kill child process if exists
-        snprintf(str,20,"/proc/%d",a.pid);
-        printf("killing %d...\n",a.pid);
-
-        if (stat(str, &st) == -1 && errno == ENOENT) {
-            continue;
-        }
-
-        kill(a.pid,SIGKILL);
-    }
-
 }
