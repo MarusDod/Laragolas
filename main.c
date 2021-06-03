@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include <gtk-3.0/gtk/gtk.h>
+#include <glib/gprintf.h>
 
 
 #define ROOT_PATH "/var/www"
@@ -31,8 +32,7 @@
 #endif
 
 static const char* virtual_host_template = 
-    "Listen %d\n"
-    "<VirtualHost *:%1$d>\n"
+    "<VirtualHost *:%d>\n"
     "   DocumentRoot \"%2$s/public/\"\n"
     "   ServerName %3$s.test\n"
     "   ServerAlias *.%3$s.test\n"
@@ -63,6 +63,10 @@ GtkButton* webButton = NULL;
 GtkButton* dbButton = NULL;
 GtkButton* terminalButton = NULL;
 GtkButton* rootButton = NULL;
+
+GtkLabel* progressLabel = NULL;
+GtkLabel* apacheStatus = NULL;
+GtkLabel* mysqlStatus = NULL;
 
 GtkButton* settingsButton = NULL;
 GtkButton* reloadButton = NULL;
@@ -107,7 +111,7 @@ void exit_handler(void);
 void write_virtual_hosts();
 void change_hosts_entry(const char* string,bool insert);
 void cleanup_hosts_entries();
-
+void change_port_entry(int port);
 
 int spawn_new_process(const char* str,bool asroot){
     pid_t pid = -1;
@@ -115,9 +119,11 @@ int spawn_new_process(const char* str,bool asroot){
     switch(pid = fork()){
         case 0:
             if(!asroot){
-                char str2[500];
-                snprintf(str2,500,"bash -c \"su $SUDO_USER -c \\\"%s\\\"\"",str);
-                system(str2);
+                char* str2 = g_strescape(str,"\b\f\n\r\t\v");
+                str2 = g_strescape(str2,"\b\f\n\r\t\v");
+                char str3[500];
+                snprintf(str3,500,"bash -c \"su $SUDO_USER -c \\\"%s\\\"\"",str2);
+                system(str3);
             }
             else{
                 system(str);
@@ -152,6 +158,7 @@ void update_config_file();
 
 void start_button_callback(GtkButton* button,gpointer data){
     int ret,pid;
+    char holder[50];
 
     if(!settings.isrunning){
         pid = spawn_new_process("systemctl start mysql.service",true);
@@ -163,6 +170,7 @@ void start_button_callback(GtkButton* button,gpointer data){
             return;
 
         set_documentRoot_popup();
+
         pid = spawn_new_process("systemctl start apache2.service",true);
 
         waitProcess(pid,"");
@@ -170,6 +178,13 @@ void start_button_callback(GtkButton* button,gpointer data){
 
         if(!ret) 
             return;
+
+        
+        sprintf(holder,"apache: %hu",settings.port);
+        gtk_label_set_label(apacheStatus,holder);
+
+        sprintf(holder,"mysql: %hu",settings.mysql_port);
+        gtk_label_set_label(mysqlStatus,holder);
 
         gtk_button_set_label(button,"stop");
         gtk_widget_set_visible(GTK_WIDGET(reloadButton),true);
@@ -196,19 +211,27 @@ void start_button_callback(GtkButton* button,gpointer data){
         gtk_widget_set_visible(GTK_WIDGET(reloadButton),false);
         gtk_widget_set_visible(GTK_WIDGET(itemRoot),false);
         settings.isrunning = false;
+        gtk_label_set_label(mysqlStatus,"");
+        gtk_label_set_label(apacheStatus,"");
     }
 }
 
 void web_button_callback(GtkButton* button,gpointer data){
-    char str[300];
+    char str[800];
 
-    sprintf(str,"firefox %s",settings.root_path);
+    sprintf(str,"bash -c \"$(xdg-settings get default-web-browser | cut -f1 -d.) 'file://%s'\"",settings.root_path);
     spawn_new_process(str,false);
 }
 
 void reload_button_callback(GtkButton* button,gpointer data){
+    if(!settings.isrunning) return;
+
     spawn_new_process("systemctl restart mysql.service",true);
     spawn_new_process("systemctl restart apache2.service",true);
+
+    cleanup_hosts_entries();
+    change_port_entry(settings.port);
+    write_virtual_hosts();
 }
 
 void terminal_button_callback(GtkButton* button,gpointer data){
@@ -249,6 +272,8 @@ void dataDir_changed_callback(GtkEntry* entry,gpointer data){
 
     settings.mysql_path = (char*) txt;
     update_config_file();
+
+    reload_button_callback(NULL,NULL);
 }
 
 void documentRoot_changed_callback(GtkEntry* entry,gpointer data){
@@ -257,6 +282,7 @@ void documentRoot_changed_callback(GtkEntry* entry,gpointer data){
 
     gtk_menu_item_set_label(GTK_MENU_ITEM(itemRoot),settings.root_path);
     set_documentRoot_popup();
+    reload_button_callback(NULL,NULL);
 }
 
 void hostName_changed_callback(GtkEntry* entry,gpointer data){
@@ -264,6 +290,7 @@ void hostName_changed_callback(GtkEntry* entry,gpointer data){
 
     settings.host = (char*) txt;
     update_config_file();
+    reload_button_callback(NULL,NULL);
 }
 
 void dbPort_changed_callback(GtkEntry* entry,gpointer data){
@@ -271,6 +298,7 @@ void dbPort_changed_callback(GtkEntry* entry,gpointer data){
 
     settings.mysql_port = atoi(txt);
     update_config_file();
+    reload_button_callback(NULL,NULL);
 }
 
 void serverPort_changed_callback(GtkEntry* entry,gpointer data){
@@ -279,6 +307,8 @@ void serverPort_changed_callback(GtkEntry* entry,gpointer data){
     settings.port = atoi(txt);
 
     update_config_file();
+
+    reload_button_callback(NULL,NULL);
 }
 
 void set_documentRoot_popup(){
@@ -309,7 +339,6 @@ void set_documentRoot_popup(){
         if(stat(str4,&stbuf) == -1 || (stbuf.st_mode & S_IFMT) != S_IFDIR)
             continue;
 
-        fprintf(stderr,"%s\n",str4);
 
         GtkWidget* item = gtk_menu_item_new_with_label(dp->d_name);
 
@@ -325,6 +354,7 @@ void set_documentRoot_popup(){
 
     cleanup_hosts_entries();
     write_virtual_hosts();
+    change_port_entry(settings.port);
 }
 
 int show_popup(GtkWidget *widget, GdkEvent *event) {
@@ -479,17 +509,25 @@ void write_virtual_hosts(){
 
 }
 
+void change_port_entry(int port){
+    char str[300];
+    static const char* path = "/etc/apache2/ports.conf";
+
+    snprintf(str,300,"sudo bash "CONFIG_PATH"add_entry.sh port %d %s",port,path);
+    system(str);
+}
+
 void change_hosts_entry(const char* string,bool insert){
     static const char* ip = "127.0.0.1";
 
     char str[300];
-    snprintf(str,200,"bash " CONFIG_PATH"add_entry.sh %s %s %s %s",ip,string,HOST_ETC,insert ? "add" : "delete");
+    snprintf(str,200,"bash " CONFIG_PATH"add_entry.sh %s %s %s %s",insert ? "add" : "delete",ip,string,HOST_ETC);
     system(str);
 }
 
 void cleanup_hosts_entries(){
     system("sudo sed -i \"/\\#laragolas\\!\\#/d\" " HOST_ETC);
-    system("sudo rm -rf " APACHE_ETC "*");
+    system("sudo rm -rf " APACHE_ETC "auto.*");
 }
 
 void update_config_file(){
@@ -512,7 +550,6 @@ int main(int argc,char* argv[]){
     parse_config(CONFIG_PATH"config.txt");
 
     gtk_init(&argc,&argv);
-
     builder = gtk_builder_new();
     gtk_builder_add_from_file(builder,CONFIG_PATH"gui.glade",NULL);
 
@@ -560,6 +597,10 @@ int main(int argc,char* argv[]){
     projectEntry = GTK_ENTRY(gtk_builder_get_object(builder, "projectEntry"));
     dbEntry = GTK_ENTRY(gtk_builder_get_object(builder, "dbEntry"));
 
+    progressLabel = GTK_LABEL(gtk_builder_get_object(builder, "progressLabel"));
+    apacheStatus = GTK_LABEL(gtk_builder_get_object(builder, "apacheStatus"));
+    mysqlStatus = GTK_LABEL(gtk_builder_get_object(builder, "mysqlStatus"));
+
     okButton1 = GTK_BUTTON(gtk_builder_get_object(builder, "okButton1"));
     cancelButton1 = GTK_BUTTON(gtk_builder_get_object(builder, "cancelButton1"));
 
@@ -604,6 +645,7 @@ int main(int argc,char* argv[]){
     g_signal_connect(GTK_WIDGET (dbPort), "activate",G_CALLBACK(dbPort_changed_callback),NULL);
     g_signal_connect(GTK_WIDGET (serverPort), "activate",G_CALLBACK(serverPort_changed_callback),NULL);
 
+    settings.isrunning = !settings.isrunning;
     start_button_callback(startButton,NULL);
 
     gtk_widget_show(window);

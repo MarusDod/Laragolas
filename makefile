@@ -1,4 +1,4 @@
-prog=laragolas.out
+prog=laragolas
 install_path=/usr/local
 bin_path=$(install_path)/bin
 desktop_path=$(install_path)/share/applications
@@ -27,16 +27,11 @@ release: main.c gui.glade
 
 clean:
 	rm -f *.out
+	rm ./laragolas
 	rm -f *~
-	rm -f laragolas.desktop
-
-echo:
-	echo "\n\n\n\n"
-	echo $(CONFIG)
-
 
 install:
-	cp ./laragolas.out $(bin_path)/laragolas.out
+	cp ./laragolas $(bin_path)/laragolas
 	cp ./laragolas.desktop $(desktop_path)/laragolas.desktop
 	cp ./laragolas.png $(icon_path)/laragolas.png
 	mkdir -p $(config_path)
@@ -44,12 +39,14 @@ install:
 	cp gui.glade icon.jpeg add_entry.sh logo.jpeg $(config_path)/
 	cp laragolas.desktop $(shortcut_path)/laragolas.desktop
 	chmod +x $(shortcut_path)/laragolas.desktop
+	echo "$(SUDO_USER) ALL=NOPASSWD: $(bin_path)/laragolas #laragolas!#" | sudo EDITOR='tee -a' visudo
 
 uninstall:
-	rm -f $(bin_path)/laragolas.out
+	rm -f $(bin_path)/laragolas
 	rm -f $(desktop_path)/laragolas.desktop
 	rm -f $(icon_path)/laragolas.png
 	rm -rf $(config_path)
 	rm -f $(shortcut_path)/laragolas.desktop
+	sudo EDITOR="sed -i /#laragolas!#/d" visudo
 
 
