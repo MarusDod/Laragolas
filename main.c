@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <stdbool.h>
 #include <sys/wait.h>
 #include <errno.h>
@@ -605,6 +606,12 @@ int main(int argc,char* argv[]){
     cancelButton1 = GTK_BUTTON(gtk_builder_get_object(builder, "cancelButton1"));
 
     settingsButton = GTK_BUTTON(gtk_builder_get_object(builder, "settingsButton"));
+    GtkWidget* settingsImage = gtk_image_new_from_file(CONFIG_PATH"assets/icon.png");
+    gtk_button_set_image(settingsButton,settingsImage);
+
+
+    GtkImage* logoImage = GTK_IMAGE(gtk_image_new_from_file(CONFIG_PATH"assets/logo.png"));
+    gtk_image_set_from_file(logoImage,CONFIG_PATH"assets/logo.png");
 
     documentRoot = GTK_ENTRY(gtk_builder_get_object(builder, "documentRootEntry"));
     gtk_entry_set_text(documentRoot,settings.root_path);

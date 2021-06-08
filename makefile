@@ -1,7 +1,7 @@
 prog=laragolas
 install_path=/usr/local
 bin_path=$(install_path)/bin
-desktop_path=$(install_path)/share/applications
+desktop_path=/usr/share/applications
 shortcut_path=/home/$(SUDO_USER)/Desktop
 config_path=/etc/laragolas
 icon_path=/usr/share/icons
@@ -36,7 +36,9 @@ install:
 	cp ./laragolas.png $(icon_path)/laragolas.png
 	mkdir -p $(config_path)
 	echo $(CONFIG) > $(config_path)/config.txt
-	cp gui.glade icon.jpeg add_entry.sh logo.jpeg $(config_path)/
+	cp gui.glade  $(config_path)/
+	mkdir $(config_path)/assets
+	cp ./assets/* $(config_path)/assets/
 	cp laragolas.desktop $(shortcut_path)/laragolas.desktop
 	chmod +x $(shortcut_path)/laragolas.desktop
 	echo "$(SUDO_USER) ALL=NOPASSWD: $(bin_path)/laragolas #laragolas!#" | sudo EDITOR='tee -a' visudo

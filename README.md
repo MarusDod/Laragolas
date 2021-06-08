@@ -7,7 +7,6 @@ GUI do laravel para Linux.
 ## Requisitos
 *   Ter uma Debian based distro
 *   Systemd
-*   Usar GNOME como DE
 
 ## Dependências
 *   libgtk-3-dev
@@ -38,5 +37,7 @@ GUI do laravel para Linux.
 
 ## Correr
 ```bash
-   $ laragolas
+   $ sudo laragolas
 ```
+
+![alt](assets/2021-06-08_15-12.png) | ![alt](assets/2021-06-08_15-14.png)

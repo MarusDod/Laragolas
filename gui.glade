@@ -183,7 +183,7 @@
   <object class="GtkImage" id="settingsImage1">
     <property name="visible">True</property>
     <property name="can_focus">False</property>
-    <property name="pixbuf">icon.jpeg</property>
+    <property name="pixbuf">assets/icon.png</property>
   </object>
   <object class="GtkWindow" id="mainWindow">
     <property name="can_focus">False</property>
@@ -204,11 +204,11 @@
             <property name="visible">True</property>
             <property name="can_focus">False</property>
             <child>
-              <object class="GtkImage">
+              <object class="GtkImage" id="logoImage">
                 <property name="visible">True</property>
                 <property name="can_focus">False</property>
                 <property name="valign">center</property>
-                <property name="pixbuf">logo.jpeg</property>
+                <property name="pixbuf">assets/logo.png</property>
               </object>
               <packing>
                 <property name="expand">False</property>
