@@ -36,6 +36,7 @@ install:
 	cp ./laragolas.png $(icon_path)/laragolas.png
 	mkdir -p $(config_path)
 	echo $(CONFIG) > $(config_path)/config.txt
+	cp add_entry.sh $(config_path)/add_entry.sh
 	cp gui.glade  $(config_path)/
 	mkdir $(config_path)/assets
 	cp ./assets/* $(config_path)/assets/
